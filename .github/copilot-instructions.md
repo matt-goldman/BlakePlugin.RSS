@@ -72,7 +72,56 @@ Since this is a Blake plugin library, validation requires integrating with the B
 4. **Blake dependency**: Runtime testing requires Blake CLI and understanding of Blake static site generator workflow
 
 ### Plugin Architecture
-TODO
+
+BlakePlugin.RSS follows the standard Blake plugin architecture pattern:
+
+#### Blake Plugin Interface
+All Blake plugins implement the `IBlakePlugin` interface from `Blake.BuildTools`, which provides two main extension points:
+
+```csharp
+public interface IBlakePlugin
+{
+    Task BeforeBakeAsync(BlakeContext context, ILogger? logger = null);
+    Task AfterBakeAsync(BlakeContext context, ILogger? logger = null);
+}
+```
+
+#### Plugin Lifecycle
+- **BeforeBakeAsync**: Executed before Blake processes the site content. Used for preprocessing tasks like validating configuration, setting up resources, or modifying content before the main bake process.
+- **AfterBakeAsync**: Executed after Blake has processed all content. Used for post-processing tasks like generating additional files, optimizing output, or performing cleanup.
+
+#### RSS Plugin Implementation
+The RSS plugin specifically operates in the **AfterBakeAsync** phase to:
+
+1. **Template Processing**: Reads the RSS template file (`wwwroot/feed.template.xml`)
+2. **Content Extraction**: Accesses site content through `BlakeContext` to get posts/pages
+3. **Placeholder Resolution**: Replaces template placeholders using a hierarchical resolution system:
+   - CLI arguments (highest priority): `--rss:BaseUrl=https://example.com`
+   - PageModel properties: `Title`, `Description`, `PublishedUtc`, `Slug`, `Tags`, `Html`
+   - PageModel.Metadata dictionary: Custom metadata like `author`, `summary`, `audioUrl`
+   - Default/derived values: Calculated values like permalinks and RFC 1123 dates
+4. **Feed Generation**: Duplicates `<item>` templates for each post and writes final `wwwroot/feed.xml`
+
+#### BlakeContext Integration
+The `BlakeContext` provides access to:
+- Site configuration and metadata
+- Content index (all pages/posts)
+- CLI arguments (accessible via pattern matching like `--rss:*`)
+- Build environment information
+- Logging services
+
+#### Error Handling
+The plugin implements fail-fast behavior:
+- Missing required placeholders cause build failures with helpful error messages
+- Clear indication of resolution order attempted
+- Guidance on how to provide missing values via CLI or metadata
+
+#### Zero Configuration Design
+The plugin is designed to work with minimal setup:
+- Requires only a template file placement
+- Sensible defaults for most RSS fields
+- CLI arguments available for customization without code changes
+- Works with existing Blake site structure and content
 
 ### Dependencies
 - **Blake.BuildTools**: Core Blake plugin interface and build tools

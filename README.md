@@ -4,8 +4,8 @@ This plugin generates an RSS feed for your Blake site with zero configuration.
 
 ## How it works
 
-* You add a template file: wwwroot/feed.template.xml
-* The plugin reads this template, duplicates the <item> seed inside <Items>…</Items> for each post in your content index, replaces placeholders, and writes the output to wwwroot/feed.xml.
+* You add a template file: `wwwroot/feed.template.xml`
+* The plugin reads this template, duplicates the `<item>` seed inside `<Items>…</Items>` for each post in your content index, replaces placeholders, and writes the output to `wwwroot/feed.xml`.
 
 ## Setup
 

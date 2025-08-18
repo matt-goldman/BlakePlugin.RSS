@@ -63,6 +63,9 @@ public class Plugin : IBlakePlugin
         // Process channel level placeholders
         string processedContent = ProcessChannelPlaceholders(templateContent, cliArgs);
         
+        // Validate that required RSS elements exist in the processed content
+        ValidateRequiredRssElements(processedContent);
+        
         // Remove Items section for now (will be implemented later)
         processedContent = RemoveItemsSection(processedContent);
         
@@ -187,6 +190,56 @@ public class Plugin : IBlakePlugin
         if (parsedUri.Scheme != "http" && parsedUri.Scheme != "https")
         {
             throw new InvalidOperationException($"RSS plugin error: Link URL must use http or https scheme, got '{parsedUri.Scheme}'.");
+        }
+    }
+    
+    private void ValidateRequiredRssElements(string content)
+    {
+        // Required RSS elements according to RSS 2.0 spec
+        string[] requiredElements = { "title", "link", "description" };
+        var missingElements = new List<string>();
+        
+        foreach (string element in requiredElements)
+        {
+            string startTag = $"<{element}";
+            string endTag = $"</{element}>";
+            
+            // Check if element exists in the content
+            // Look for start tag (allowing for attributes like <link href="...">)
+            int startIndex = content.IndexOf(startTag, StringComparison.OrdinalIgnoreCase);
+            int endIndex = content.IndexOf(endTag, StringComparison.OrdinalIgnoreCase);
+            
+            // Element must have both opening and closing tags
+            if (startIndex == -1 || endIndex == -1 || endIndex <= startIndex)
+            {
+                missingElements.Add(element);
+            }
+            else
+            {
+                // Check if the element has content (not empty)
+                // Find the actual start of content (after the closing >)
+                int contentStart = content.IndexOf('>', startIndex);
+                if (contentStart != -1 && contentStart < endIndex)
+                {
+                    string elementContent = content.Substring(contentStart + 1, endIndex - contentStart - 1).Trim();
+                    if (string.IsNullOrWhiteSpace(elementContent))
+                    {
+                        missingElements.Add(element + " (empty)");
+                    }
+                }
+                else
+                {
+                    missingElements.Add(element + " (malformed)");
+                }
+            }
+        }
+        
+        if (missingElements.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"RSS plugin error: Required RSS elements are missing or empty in the template: {string.Join(", ", missingElements)}.\n" +
+                $"Each RSS feed must have <title>, <link>, and <description> elements in the <channel>.\n" +
+                $"Either add these elements directly to your template or use placeholders like {{{{Title}}}}, {{{{Link}}}}, {{{{Description}}}} with corresponding CLI arguments.");
         }
     }
     

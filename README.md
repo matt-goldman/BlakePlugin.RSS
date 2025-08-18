@@ -48,7 +48,12 @@ Perfect for blogs, news sites, or any content site where you want readers to sub
 
 4. **Build your site**:
    ```bash
-   blake bake --rss:Link=https://yoursite.com --rss:Title="Your Site Name" --rss:Description="Your site description"
+   blake bake --rss:Link=https://yoursite.com
+   ```
+   
+5. (Optional) Supply any additional metadata via command line options, such as:
+   ```bash
+   blake bake --rss:Title="My Blog" --rss:Description="Latest posts about tech"
    ```
 
 That's it! Your RSS feed will be generated at `wwwroot/feed.xml`.
@@ -84,6 +89,8 @@ For custom metadata, use any placeholder name:
 ```bash
 blake bake --rss:author="Jane Doe" --rss:language="en-us"
 ```
+
+Ignore folders (e.g. `Page` or `Draft`) by passing `--rss:ignore-path="/pages"`.
 
 ## Blake Resources
 

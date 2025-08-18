@@ -290,10 +290,6 @@ public class Plugin : IBlakePlugin
         if (context.GeneratedPages.Count > 0)
         {
             // Check if args contains --rss:ignore-path
-            string? ignorePath = null;
-            if (cliArgs.TryGetValue("ignore-path", out var ignorePathValue))
-            {
-                ignorePath = ignorePathValue;
             cliArgs.TryGetValue("ignore-path", out var ignorePath);
             
             foreach (var generatedPage in context.GeneratedPages)

@@ -14,10 +14,10 @@ public class Plugin : IBlakePlugin
     public async Task AfterBakeAsync(BlakeContext context, ILogger? logger = null)
     {
         // Check for CLI argument --rss:template=[file]
-        string? customTemplatePath = GetCustomTemplateFromCli(context);
+        var customTemplatePath = GetCustomTemplateFromCli(context);
         
         string templatePath;
-        bool isCustomTemplate = !string.IsNullOrEmpty(customTemplatePath);
+        var isCustomTemplate = !string.IsNullOrEmpty(customTemplatePath);
         
         if (isCustomTemplate)
         {
@@ -56,8 +56,8 @@ public class Plugin : IBlakePlugin
     private async Task ProcessTemplateAndGenerateFeed(string templatePath, BlakeContext context, ILogger? logger = null)
     {
         // Read the template
-        string templateContent = await File.ReadAllTextAsync(templatePath);
-        logger?.LogInformation($"Processing RSS template from: {templatePath}");
+        var templateContent = await File.ReadAllTextAsync(templatePath);
+        logger?.LogInformation("Processing RSS template from: {TemplatePath}", templatePath);
         
         // Extract CLI arguments
         var cliArgs = ExtractRssCliArguments(context);
@@ -72,33 +72,33 @@ public class Plugin : IBlakePlugin
         processedContent = ProcessItemsSection(processedContent, context, cliArgs, baseUrl);
         
         // Write to feed.xml
-        string outputPath = Path.Combine(GetProjectPath(context), "wwwroot", "feed.xml");
+        var outputPath = Path.Combine(GetProjectPath(context), "wwwroot", "feed.xml");
         
         // Ensure wwwroot directory exists
-        string? outputDirectory = Path.GetDirectoryName(outputPath);
+        var outputDirectory = Path.GetDirectoryName(outputPath);
         if (!string.IsNullOrEmpty(outputDirectory) && !Directory.Exists(outputDirectory))
         {
             Directory.CreateDirectory(outputDirectory);
         }
         
         await File.WriteAllTextAsync(outputPath, processedContent);
-        logger?.LogInformation($"RSS feed generated at: {outputPath}");
+        logger?.LogInformation("RSS feed generated at: {OutputPath}", outputPath);
     }
     
     private Dictionary<string, string> ExtractRssCliArguments(BlakeContext context)
     {
         var rssArgs = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         
-        foreach (string arg in context.Arguments)
+        foreach (var arg in context.Arguments)
         {
             if (arg.StartsWith(RssCliPrefix, StringComparison.OrdinalIgnoreCase))
             {
-                string keyValue = arg.Substring(RssCliPrefix.Length);
-                int equalsIndex = keyValue.IndexOf('=');
+                var keyValue = arg.Substring(RssCliPrefix.Length);
+                var equalsIndex = keyValue.IndexOf('=');
                 if (equalsIndex > 0)
                 {
-                    string key = keyValue.Substring(0, equalsIndex);
-                    string value = keyValue.Substring(equalsIndex + 1);
+                    var key = keyValue.Substring(0, equalsIndex);
+                    var value = keyValue.Substring(equalsIndex + 1);
                     rssArgs[key] = value;
                 }
             }
@@ -110,11 +110,12 @@ public class Plugin : IBlakePlugin
     private (string content, string? baseUrl) ProcessChannelPlaceholders(string content, Dictionary<string, string> cliArgs)
     {
         // Channel level placeholders to process
-        var placeholders = new Dictionary<string, string>();
-        
-        // LastBuildDate - always auto-generated
-        placeholders["LastBuildDate"] = DateTime.UtcNow.ToString("R"); // RFC 1123 format
-        
+        var placeholders = new Dictionary<string, string>
+        {
+            // LastBuildDate - always auto-generated
+            ["LastBuildDate"] = DateTime.UtcNow.ToString("R") // RFC 1123 format
+        };
+
         // Process mandatory fields: Title, Description, Link
         ProcessMandatoryPlaceholder(content, cliArgs, placeholders, "Title");
         ProcessMandatoryPlaceholder(content, cliArgs, placeholders, "Description");
@@ -122,16 +123,16 @@ public class Plugin : IBlakePlugin
         
         // Validate Link if provided and extract base URL
         string? baseUrl = null;
-        if (placeholders.ContainsKey("Link"))
+        if (placeholders.TryGetValue("Link", out var value))
         {
-            ValidateUrl(placeholders["Link"]);
-            baseUrl = placeholders["Link"].TrimEnd('/');
+            ValidateUrl(value);
+            baseUrl = value.TrimEnd('/');
         }
         
         // Replace placeholders in content
         foreach (var placeholder in placeholders)
         {
-            string token = $"{{{{{placeholder.Key}}}}}";
+            var token = $"{{{{{placeholder.Key}}}}}";
             content = content.Replace(token, placeholder.Value);
         }
         
@@ -152,11 +153,11 @@ public class Plugin : IBlakePlugin
     private void ProcessMandatoryPlaceholder(string content, Dictionary<string, string> cliArgs, 
         Dictionary<string, string> placeholders, string fieldName)
     {
-        string token = $"{{{{{fieldName}}}}}";
-        bool hasPlaceholder = content.Contains(token);
+        var token = $"{{{{{fieldName}}}}}";
+        var hasPlaceholder = content.Contains(token);
         
         // Check CLI first (highest priority)
-        if (cliArgs.TryGetValue(fieldName, out string? cliValue))
+        if (cliArgs.TryGetValue(fieldName, out var cliValue))
         {
             placeholders[fieldName] = cliValue;
             return;
@@ -196,7 +197,7 @@ public class Plugin : IBlakePlugin
         }
         
         // Try to parse as URI for basic validation
-        if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? parsedUri))
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var parsedUri))
         {
             throw new InvalidOperationException($"RSS plugin error: Link URL '{url}' is not a valid URL format.");
         }
@@ -214,15 +215,15 @@ public class Plugin : IBlakePlugin
         string[] requiredElements = { "title", "link", "description" };
         var missingElements = new List<string>();
         
-        foreach (string element in requiredElements)
+        foreach (var element in requiredElements)
         {
-            string startTag = $"<{element}";
-            string endTag = $"</{element}>";
+            var startTag = $"<{element}";
+            var endTag = $"</{element}>";
             
             // Check if element exists in the content
             // Look for start tag (allowing for attributes like <link href="...">)
-            int startIndex = content.IndexOf(startTag, StringComparison.OrdinalIgnoreCase);
-            int endIndex = content.IndexOf(endTag, StringComparison.OrdinalIgnoreCase);
+            var startIndex = content.IndexOf(startTag, StringComparison.OrdinalIgnoreCase);
+            var endIndex = content.IndexOf(endTag, StringComparison.OrdinalIgnoreCase);
             
             // Element must have both opening and closing tags
             if (startIndex == -1 || endIndex == -1 || endIndex <= startIndex)
@@ -233,10 +234,10 @@ public class Plugin : IBlakePlugin
             {
                 // Check if the element has content (not empty)
                 // Find the actual start of content (after the closing >)
-                int contentStart = content.IndexOf('>', startIndex);
+                var contentStart = content.IndexOf('>', startIndex);
                 if (contentStart != -1 && contentStart < endIndex)
                 {
-                    string elementContent = content.Substring(contentStart + 1, endIndex - contentStart - 1).Trim();
+                    var elementContent = content.Substring(contentStart + 1, endIndex - contentStart - 1).Trim();
                     if (string.IsNullOrWhiteSpace(elementContent))
                     {
                         missingElements.Add(element + " (empty)");
@@ -261,8 +262,8 @@ public class Plugin : IBlakePlugin
     private string ProcessItemsSection(string content, BlakeContext context, Dictionary<string, string> cliArgs, string? baseUrl)
     {
         // Find the <Items>...</Items> section
-        int itemsStart = content.IndexOf("<Items>", StringComparison.OrdinalIgnoreCase);
-        int itemsEnd = content.IndexOf("</Items>", StringComparison.OrdinalIgnoreCase);
+        var itemsStart = content.IndexOf("<Items>", StringComparison.OrdinalIgnoreCase);
+        var itemsEnd = content.IndexOf("</Items>", StringComparison.OrdinalIgnoreCase);
         
         if (itemsStart < 0 || itemsEnd < 0)
         {
@@ -271,9 +272,9 @@ public class Plugin : IBlakePlugin
         }
         
         // Extract the item template
-        string itemsSection = content.Substring(itemsStart + "<Items>".Length, 
+        var itemsSection = content.Substring(itemsStart + "<Items>".Length, 
             itemsEnd - itemsStart - "<Items>".Length);
-        string itemTemplate = itemsSection.Trim();
+        var itemTemplate = itemsSection.Trim();
         
         if (string.IsNullOrWhiteSpace(itemTemplate))
         {
@@ -288,11 +289,21 @@ public class Plugin : IBlakePlugin
         // Use GeneratedPages if available, otherwise fallback to creating minimal items from MarkdownPages
         if (context.GeneratedPages.Count > 0)
         {
+            // Check if args contains --rss:ignore-path
+            cliArgs.TryGetValue("ignore-path", out var ignorePath);
+            
             foreach (var generatedPage in context.GeneratedPages)
             {
                 try
                 {
-                    string processedItem = ProcessItemPlaceholders(itemTemplate, generatedPage, baseUrl, cliArgs, errors);
+                    // Skip pages that match the ignore path
+                    if (!string.IsNullOrEmpty(ignorePath) && 
+                        generatedPage.Page.Slug.StartsWith(ignorePath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+                    
+                    var processedItem = ProcessItemPlaceholders(itemTemplate, generatedPage, baseUrl, cliArgs, errors);
                     generatedItems.Add(processedItem);
                 }
                 catch (Exception ex)
@@ -317,7 +328,7 @@ public class Plugin : IBlakePlugin
                     };
                     
                     var dummyGeneratedPage = new GeneratedPage(pageModel, "", markdownPage.RawMarkdown);
-                    string processedItem = ProcessItemPlaceholders(itemTemplate, dummyGeneratedPage, baseUrl, cliArgs, errors);
+                    var processedItem = ProcessItemPlaceholders(itemTemplate, dummyGeneratedPage, baseUrl, cliArgs, errors);
                     generatedItems.Add(processedItem);
                 }
                 catch (Exception ex)
@@ -335,10 +346,10 @@ public class Plugin : IBlakePlugin
         }
         
         // Replace the Items section with generated items
-        string beforeItems = content.Substring(0, itemsStart).TrimEnd();
-        string afterItems = content.Substring(itemsEnd + "</Items>".Length).TrimStart();
+        var beforeItems = content.Substring(0, itemsStart).TrimEnd();
+        var afterItems = content.Substring(itemsEnd + "</Items>".Length).TrimStart();
         
-        string generatedItemsContent = generatedItems.Count > 0 
+        var generatedItemsContent = generatedItems.Count > 0 
             ? "\n" + string.Join("\n", generatedItems) + "\n"
             : "\n";
             
@@ -358,7 +369,7 @@ public class Plugin : IBlakePlugin
         // Generate Item.Link (absolute URL)
         if (!string.IsNullOrEmpty(baseUrl) && !string.IsNullOrEmpty(page.Slug))
         {
-            string link = $"{baseUrl}/{page.Slug.TrimStart('/')}";
+            var link = $"{baseUrl}/{page.Slug.TrimStart('/')}";
             ProcessItemPlaceholder(itemTemplate, "Item.Link", link, placeholders, errors, page.Title);
         }
         else if (itemTemplate.Contains("{{Item.Link}}", StringComparison.OrdinalIgnoreCase))
@@ -367,9 +378,9 @@ public class Plugin : IBlakePlugin
         }
         
         // Generate Item.Guid (defaults to permalink)
-        if (placeholders.ContainsKey("Item.Link"))
+        if (placeholders.TryGetValue("Item.Link", out var value))
         {
-            ProcessItemPlaceholder(itemTemplate, "Item.Guid", placeholders["Item.Link"], placeholders, errors, page.Title);
+            ProcessItemPlaceholder(itemTemplate, "Item.Guid", value, placeholders, errors, page.Title);
         }
         else if (itemTemplate.Contains("{{Item.Guid}}", StringComparison.OrdinalIgnoreCase))
         {
@@ -379,7 +390,7 @@ public class Plugin : IBlakePlugin
         // Generate Item.PubDate from Date property
         if (page.Date.HasValue)
         {
-            string pubDate = page.Date.Value.ToString("R", CultureInfo.InvariantCulture); // RFC 1123 format
+            var pubDate = page.Date.Value.ToString("R", CultureInfo.InvariantCulture); // RFC 1123 format
             ProcessItemPlaceholder(itemTemplate, "Item.PubDate", pubDate, placeholders, errors, page.Title);
         }
         else if (itemTemplate.Contains("{{Item.PubDate}}", StringComparison.OrdinalIgnoreCase))
@@ -388,7 +399,7 @@ public class Plugin : IBlakePlugin
         }
         
         // Generate Item.CategoriesXml from Tags
-        string categoriesXml = GenerateCategoriesXml(page.Tags);
+        var categoriesXml = GenerateCategoriesXml(page.Tags);
         if (itemTemplate.Contains("{{Item.CategoriesXml}}", StringComparison.OrdinalIgnoreCase))
         {
             placeholders["Item.CategoriesXml"] = categoriesXml;
@@ -398,11 +409,11 @@ public class Plugin : IBlakePlugin
         if (itemTemplate.Contains("{{Item.ContentEncoded}}", StringComparison.OrdinalIgnoreCase))
         {
             // Use the rendered HTML content if available, otherwise fallback to Description
-            string htmlContent = !string.IsNullOrEmpty(generatedPage.RazorHtml) 
+            var htmlContent = !string.IsNullOrEmpty(generatedPage.RazorHtml) 
                 ? generatedPage.RazorHtml 
                 : page.Description ?? "";
                 
-            string contentEncoded = !string.IsNullOrEmpty(htmlContent) 
+            var contentEncoded = !string.IsNullOrEmpty(htmlContent) 
                 ? $"<content:encoded><![CDATA[{htmlContent}]]></content:encoded>"
                 : "";
             placeholders["Item.ContentEncoded"] = contentEncoded;
@@ -412,10 +423,10 @@ public class Plugin : IBlakePlugin
         ProcessCustomItemPlaceholders(itemTemplate, page, cliArgs, placeholders, errors);
         
         // Replace placeholders in template
-        string processedItem = itemTemplate;
+        var processedItem = itemTemplate;
         foreach (var placeholder in placeholders)
         {
-            string token = $"{{{{{placeholder.Key}}}}}";
+            var token = $"{{{{{placeholder.Key}}}}}";
             processedItem = processedItem.Replace(token, placeholder.Value);
         }
         
@@ -425,7 +436,7 @@ public class Plugin : IBlakePlugin
     private void ProcessItemPlaceholder(string template, string placeholderName, string? value, 
         Dictionary<string, string> placeholders, List<string> errors, string pageTitle)
     {
-        string token = $"{{{{{placeholderName}}}}}";
+        var token = $"{{{{{placeholderName}}}}}";
         if (template.Contains(token, StringComparison.OrdinalIgnoreCase))
         {
             if (!string.IsNullOrEmpty(value))
@@ -459,9 +470,9 @@ public class Plugin : IBlakePlugin
         
         foreach (System.Text.RegularExpressions.Match match in customPlaceholderMatches)
         {
-            string fullPlaceholder = match.Groups[0].Value; // {{Item.Something}}
-            string placeholderName = $"Item.{match.Groups[1].Value}"; // Item.Something
-            string metadataKey = match.Groups[1].Value; // Something
+            var fullPlaceholder = match.Groups[0].Value; // {{Item.Something}}
+            var placeholderName = $"Item.{match.Groups[1].Value}"; // Item.Something
+            var metadataKey = match.Groups[1].Value; // Something
             
             // Skip if we already processed this placeholder
             if (placeholders.ContainsKey(placeholderName))
@@ -474,8 +485,8 @@ public class Plugin : IBlakePlugin
             string? value = null;
             
             // 1. Check CLI args first (only for custom placeholders)
-            string cliKey = metadataKey.ToLowerInvariant();
-            if (cliArgs.TryGetValue(cliKey, out string? cliValue))
+            var cliKey = metadataKey.ToLowerInvariant();
+            if (cliArgs.TryGetValue(cliKey, out var cliValue))
             {
                 value = cliValue;
             }
@@ -517,14 +528,14 @@ public class Plugin : IBlakePlugin
     private string RemoveItemsSection(string content)
     {
         // Find and remove the <Items>...</Items> section
-        int itemsStart = content.IndexOf("<Items>", StringComparison.OrdinalIgnoreCase);
-        int itemsEnd = content.IndexOf("</Items>", StringComparison.OrdinalIgnoreCase);
+        var itemsStart = content.IndexOf("<Items>", StringComparison.OrdinalIgnoreCase);
+        var itemsEnd = content.IndexOf("</Items>", StringComparison.OrdinalIgnoreCase);
         
         if (itemsStart >= 0 && itemsEnd >= 0)
         {
             // Remove the entire Items section
-            string beforeItems = content.Substring(0, itemsStart).TrimEnd();
-            string afterItems = content.Substring(itemsEnd + "</Items>".Length).TrimStart();
+            var beforeItems = content.Substring(0, itemsStart).TrimEnd();
+            var afterItems = content.Substring(itemsEnd + "</Items>".Length).TrimStart();
             
             // Join with appropriate spacing
             content = beforeItems + "\n\n" + afterItems;
@@ -536,7 +547,7 @@ public class Plugin : IBlakePlugin
     private string? GetCustomTemplateFromCli(BlakeContext context)
     {
         // Look for --rss:template= in CLI arguments
-        foreach (string arg in context.Arguments)
+        foreach (var arg in context.Arguments)
         {
             if (arg.StartsWith(RssTemplateCliPrefix, StringComparison.OrdinalIgnoreCase))
             {
@@ -554,14 +565,14 @@ public class Plugin : IBlakePlugin
     private async Task CreateDefaultTemplate(string templatePath)
     {
         // Ensure directory exists
-        string? directory = Path.GetDirectoryName(templatePath);
+        var directory = Path.GetDirectoryName(templatePath);
         if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
         {
             Directory.CreateDirectory(directory);
         }
         
         // Create template from README content
-        string templateContent = GetDefaultTemplateContent();
+        var templateContent = GetDefaultTemplateContent();
         await File.WriteAllTextAsync(templatePath, templateContent);
     }
     

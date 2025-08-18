@@ -90,7 +90,30 @@ For custom metadata, use any placeholder name:
 blake bake --rss:author="Jane Doe" --rss:language="en-us"
 ```
 
-Ignore folders (e.g. `Page` or `Draft`) by passing `--rss:ignore-path="/pages"`.
+**Content filtering and limiting:**
+
+Control which pages are included in your RSS feed:
+
+```bash
+# Ignore specific paths (no leading slash needed)
+blake bake --rss:ignore-paths="pages,drafts"
+
+# Include only specific paths  
+blake bake --rss:include-paths="blog,news"
+
+# Limit number of items (default: 20)
+blake bake --rss:max-items=10
+```
+
+**Path handling:**
+- Leading slashes are automatically handled - specify `pages` instead of `/pages`
+- Trailing slashes are honored - `page/` won't match `/pages/`  
+- Multiple paths can be separated by commas or semicolons
+- `ignore-paths` takes precedence if both include and ignore patterns match
+- Items are automatically sorted by publication date (newest first)
+
+**Backward compatibility:**
+- `--rss:ignore-path` (singular) still works for single path exclusions
 
 ## Blake Resources
 
@@ -102,7 +125,7 @@ Ignore folders (e.g. `Page` or `Draft`) by passing `--rss:ignore-path="/pages"`.
 
 Post-MVP features under consideration:
 - Support for RSS extensions (iTunes podcasting, media RSS)
-- Custom feed item limits and filtering
+- ~~Custom feed item limits and filtering~~ ✅ **Implemented**
 - Multiple feed generation (e.g., category-specific feeds)
 - RSS 2.0 extensions for enhanced metadata
 

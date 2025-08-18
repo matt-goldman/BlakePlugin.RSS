@@ -1,119 +1,104 @@
-# Blake RSS Feed Plugin (MVP Spec)
+# Blake RSS Feed Plugin
 
-This plugin generates an RSS feed for your Blake site with zero configuration.
+A zero-configuration RSS feed generator plugin for [Blake](https://github.com/matt-goldman/blake) static sites.
 
-## How it works
+## What it does
 
-* You add a template file: `wwwroot/feed.template.xml`
-* The plugin reads this template, duplicates the `<item>` seed inside `<Items>…</Items>` for each post in your content index, replaces placeholders, and writes the output to `wwwroot/feed.xml`.
+This plugin automatically generates an RSS feed for your Blake static site. Simply add a template file, and the plugin will create a complete RSS feed (`feed.xml`) with all your posts, properly formatted with absolute URLs, valid dates, and metadata.
 
-## Setup
+Perfect for blogs, news sites, or any content site where you want readers to subscribe to updates via RSS.
 
-1. Add a template:
+## Installation
 
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
-  <channel>
-    <title>{{Title}}</title>
-    <link>{{Link}}</link>
-    <description>{{Description}}</description>
-    <lastBuildDate>{{LastBuildDate}}</lastBuildDate>
+1. **Install the NuGet package** in your Blake site project:
+   ```bash
+   dotnet add package BlakePlugin.RSS
+   ```
 
-    <Items>
-      <item>
-        <title>{{Item.Title}}</title>
-        <link>{{Item.Link}}</link>
-        <guid isPermaLink="true">{{Item.Guid}}</guid>
-        <pubDate>{{Item.PubDate}}</pubDate>
-        <description><![CDATA[{{Item.Description}}]]></description>
-        {{Item.CategoriesXml}}
-        {{Item.ContentEncoded}}
-      </item>
-    </Items>
-  </channel>
-</rss>
-```
+2. **Create a feed template** at `wwwroot/feed.template.xml`:
+   ```xml
+   <?xml version="1.0" encoding="UTF-8"?>
+   <rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+     <channel>
+       <title>{{Title}}</title>
+       <link>{{Link}}</link>
+       <description>{{Description}}</description>
+       <lastBuildDate>{{LastBuildDate}}</lastBuildDate>
 
-2. Update your csproj so the template isn’t served directly:
-```xml
-<ItemGroup>
-  <None Include="wwwroot\feed.template.xml" />
-  <Content Remove="wwwroot\feed.template.xml" />
-</ItemGroup>
-```
+       <Items>
+         <item>
+           <title>{{Item.Title}}</title>
+           <link>{{Item.Link}}</link>
+           <guid isPermaLink="true">{{Item.Guid}}</guid>
+           <pubDate>{{Item.PubDate}}</pubDate>
+           <description><![CDATA[{{Item.Description}}]]></description>
+           {{Item.CategoriesXml}}
+         </item>
+       </Items>
+     </channel>
+   </rss>
+   ```
 
-3. Install the NuGet package for the plugin.
+3. **Exclude template from serving** (add to your `.csproj`):
+   ```xml
+   <ItemGroup>
+     <Content Remove="wwwroot\feed.template.xml" />
+   </ItemGroup>
+   ```
 
-That’s it - call `blake bake` and the plugin generates `wwwroot/feed.xml`.
+4. **Build your site**:
+   ```bash
+   blake bake --rss:Link=https://yoursite.com --rss:Title="Your Site Name" --rss:Description="Your site description"
+   ```
 
-## Placeholders
+That's it! Your RSS feed will be generated at `wwwroot/feed.xml`.
 
-### Channel level
+## Configuration
 
-* `{{Title}}` → Site title
-* `{{Link}}` → Base URL (must be provided with CLI arg if not in template)
-* `{{Description}}` → Site description
-* `{{LastBuildDate}}` → Current bake time (RFC 1123)
+### Basic placeholders
 
-### Item level
+The template supports these placeholders that are automatically filled:
 
-* `{{Item.Title}}`
-* `{{Item.Link}}` (absolute URL)
-* `{{Item.Guid}}` (permalink or stable hash)
-* `{{Item.PubDate}}` (RFC 1123 UTC)
-* `{{Item.Description}}`
-* `{{Item.CategoriesXml}}` → <category>…</category> tags from metadata
-* `{{Item.ContentEncoded}}` → full HTML (if present in template)
+**Feed level:**
+- `{{Title}}` - Your site title
+- `{{Link}}` - Your site URL (provide with `--rss:Link`)
+- `{{Description}}` - Your site description
+- `{{LastBuildDate}}` - Build timestamp (auto-generated)
 
-### CLI arguments
+**Post level:**
+- `{{Item.Title}}` - Post title
+- `{{Item.Link}}` - Post URL (absolute)
+- `{{Item.Description}}` - Post description/excerpt
+- `{{Item.PubDate}}` - Post publication date
+- `{{Item.CategoriesXml}}` - Post tags as RSS categories
 
-You can replace or inject any token via CLI:
-```bash
-blake bake --rss:BaseUrl=https://example.com --rss:Title="My Blog"
-```
+### CLI options
 
-Even custom tokens work:
-```bash
---rss:cabbageId=x45Rg2   → replaces {{cabbageId}} anywhere in the template
-```
-
-Arguments are passed to all plugins via `BlakeContext` so this plugin can just look for anything matching this pattern.
-
-### Behavior
-
-* If a required placeholder has no value, the bake fails with a helpful error.
-* Posts are ordered newest → oldest (default 20 items).
-* All links are absolute.
-* Valid RFC 1123 dates.
-
-### Placeholder resolution order
-
-When the plugin encounters a `{{Token}}`, it looks for a value in this order:
-
-1. CLI argument
-If you pass `--rss:BaseUrl=https://example.com`, it replaces `{{BaseUrl}}` or `{{Link}}` directly.
-
-CLI always wins at the channel level, since it’s the most explicit.
-
-2. PageModel properties
-For item-level placeholders (`{{Item.Title}}`, `{{Item.Description}}`, etc.), the plugin first looks at strongly typed properties on the page/post model (`Title`, `Description`, `PublishedUtc`, `Slug`, `Tags`, `Html`).
-
-3. PageModel.Metadata dictionary
-If not found as a property, the plugin checks metadata (e.g. `author`, `summary`, `audioUrl`). This allows arbitrary keys to be surfaced without config.
-
-4. Default/derived values
-For some fields the plugin derives sensible defaults:
-
-* `Item.Guid` → defaults to the permalink (`BaseUrl + slug`)
-* `Item.Link` → always `BaseUrl + slug`
-* `Item.PubDate` → defaults to `Date` (from the `PageModel`) in RFC 1123 UTC
-
-5. Fail fast
-If the token is still unresolved and appears in the template, the bake fails with a clear message:
+You can set any placeholder value via command line:
 
 ```bash
-RSS plugin error: Missing value for {{BaseUrl}}.
-Checked CLI (--rss:BaseUrl), then PageModel.Metadata["BaseUrl"].
-Provide a CLI argument or add a value to the template.
+blake bake --rss:Title="My Awesome Blog" --rss:Description="Latest posts about web development"
 ```
+
+For custom metadata, use any placeholder name:
+```bash
+blake bake --rss:author="Jane Doe" --rss:language="en-us"
+```
+
+## Blake Resources
+
+- **Blake Repository**: [https://github.com/matt-goldman/blake](https://github.com/matt-goldman/blake)
+- **Blake Documentation**: [https://blake-ssg.org](https://blake-ssg.org)
+- **Blake Getting Started**: [https://blake-ssg.org/docs/getting-started](https://blake-ssg.org/docs/getting-started)
+
+## Roadmap
+
+Post-MVP features under consideration:
+- Support for RSS extensions (iTunes podcasting, media RSS)
+- Custom feed item limits and filtering
+- Multiple feed generation (e.g., category-specific feeds)
+- RSS 2.0 extensions for enhanced metadata
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

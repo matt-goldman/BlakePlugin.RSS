@@ -378,7 +378,7 @@ public class Plugin : IBlakePlugin
         }
         
         // Generate Item.Guid (defaults to permalink)
-        if (placeholders.TryGetValue("Item.Link", out string? value))
+        if (placeholders.TryGetValue("Item.Link", out var value))
         {
             ProcessItemPlaceholder(itemTemplate, "Item.Guid", value, placeholders, errors, page.Title);
         }

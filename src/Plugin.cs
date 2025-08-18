@@ -63,13 +63,13 @@ public class Plugin : IBlakePlugin
         var cliArgs = ExtractRssCliArguments(context);
         
         // Process channel level placeholders
-        string processedContent = ProcessChannelPlaceholders(templateContent, cliArgs);
+        var (processedContent, baseUrl) = ProcessChannelPlaceholders(templateContent, cliArgs);
         
         // Validate that required RSS elements exist in the processed content
         ValidateRequiredRssElements(processedContent);
         
         // Process Items section - extract template and generate items for each page
-        processedContent = ProcessItemsSection(processedContent, context, cliArgs);
+        processedContent = ProcessItemsSection(processedContent, context, cliArgs, baseUrl);
         
         // Write to feed.xml
         string outputPath = Path.Combine(GetProjectPath(context), "wwwroot", "feed.xml");
@@ -107,7 +107,7 @@ public class Plugin : IBlakePlugin
         return rssArgs;
     }
     
-    private string ProcessChannelPlaceholders(string content, Dictionary<string, string> cliArgs)
+    private (string content, string? baseUrl) ProcessChannelPlaceholders(string content, Dictionary<string, string> cliArgs)
     {
         // Channel level placeholders to process
         var placeholders = new Dictionary<string, string>();
@@ -120,10 +120,12 @@ public class Plugin : IBlakePlugin
         ProcessMandatoryPlaceholder(content, cliArgs, placeholders, "Description");
         ProcessMandatoryPlaceholder(content, cliArgs, placeholders, "Link");
         
-        // Validate Link if provided
+        // Validate Link if provided and extract base URL
+        string? baseUrl = null;
         if (placeholders.ContainsKey("Link"))
         {
             ValidateUrl(placeholders["Link"]);
+            baseUrl = placeholders["Link"].TrimEnd('/');
         }
         
         // Replace placeholders in content
@@ -133,7 +135,18 @@ public class Plugin : IBlakePlugin
             content = content.Replace(token, placeholder.Value);
         }
         
-        return content;
+        // If we don't have a base URL from CLI/placeholders, extract it from the processed content
+        if (baseUrl == null)
+        {
+            var linkMatch = System.Text.RegularExpressions.Regex.Match(content, @"<link>([^<]+)</link>", 
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (linkMatch.Success)
+            {
+                baseUrl = linkMatch.Groups[1].Value.TrimEnd('/');
+            }
+        }
+        
+        return (content, baseUrl);
     }
     
     private void ProcessMandatoryPlaceholder(string content, Dictionary<string, string> cliArgs, 
@@ -245,7 +258,7 @@ public class Plugin : IBlakePlugin
         }
     }
     
-    private string ProcessItemsSection(string content, BlakeContext context, Dictionary<string, string> cliArgs)
+    private string ProcessItemsSection(string content, BlakeContext context, Dictionary<string, string> cliArgs, string? baseUrl)
     {
         // Find the <Items>...</Items> section
         int itemsStart = content.IndexOf("<Items>", StringComparison.OrdinalIgnoreCase);
@@ -266,23 +279,6 @@ public class Plugin : IBlakePlugin
         {
             // Empty items section - just remove it
             return RemoveItemsSection(content);
-        }
-        
-        // Get base URL for generating links
-        string? baseUrl = null;
-        if (cliArgs.TryGetValue("Link", out string? linkValue))
-        {
-            baseUrl = linkValue.TrimEnd('/');
-        }
-        else
-        {
-            // Look for Link in the processed content to extract base URL
-            var linkMatch = System.Text.RegularExpressions.Regex.Match(content, @"<link>([^<]+)</link>", 
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            if (linkMatch.Success)
-            {
-                baseUrl = linkMatch.Groups[1].Value.TrimEnd('/');
-            }
         }
         
         // Process each page and generate RSS items

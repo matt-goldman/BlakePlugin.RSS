@@ -7,6 +7,7 @@ public class Plugin : IBlakePlugin
 {
     private const string DefaultTemplateFileName = "feed.template.xml";
     private const string RssTemplateCliPrefix = "--rss:template=";
+    private const string RssCliPrefix = "--rss:";
     
     public async Task AfterBakeAsync(BlakeContext context, ILogger? logger = null)
     {
@@ -46,8 +47,219 @@ public class Plugin : IBlakePlugin
             }
         }
         
-        // Template exists - continue with RSS generation (placeholder for now)
-        logger?.LogInformation($"RSS template found at: {templatePath}");
+        // Template exists - process it and generate feed.xml
+        await ProcessTemplateAndGenerateFeed(templatePath, context, logger);
+    }
+    
+    private async Task ProcessTemplateAndGenerateFeed(string templatePath, BlakeContext context, ILogger? logger = null)
+    {
+        // Read the template
+        string templateContent = await File.ReadAllTextAsync(templatePath);
+        logger?.LogInformation($"Processing RSS template from: {templatePath}");
+        
+        // Extract CLI arguments
+        var cliArgs = ExtractRssCliArguments(context);
+        
+        // Process channel level placeholders
+        string processedContent = ProcessChannelPlaceholders(templateContent, cliArgs);
+        
+        // Validate that required RSS elements exist in the processed content
+        ValidateRequiredRssElements(processedContent);
+        
+        // Remove Items section for now (will be implemented later)
+        processedContent = RemoveItemsSection(processedContent);
+        
+        // Write to feed.xml
+        string outputPath = Path.Combine(GetProjectPath(context), "wwwroot", "feed.xml");
+        
+        // Ensure wwwroot directory exists
+        string? outputDirectory = Path.GetDirectoryName(outputPath);
+        if (!string.IsNullOrEmpty(outputDirectory) && !Directory.Exists(outputDirectory))
+        {
+            Directory.CreateDirectory(outputDirectory);
+        }
+        
+        await File.WriteAllTextAsync(outputPath, processedContent);
+        logger?.LogInformation($"RSS feed generated at: {outputPath}");
+    }
+    
+    private Dictionary<string, string> ExtractRssCliArguments(BlakeContext context)
+    {
+        var rssArgs = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        
+        foreach (string arg in context.Arguments)
+        {
+            if (arg.StartsWith(RssCliPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                string keyValue = arg.Substring(RssCliPrefix.Length);
+                int equalsIndex = keyValue.IndexOf('=');
+                if (equalsIndex > 0)
+                {
+                    string key = keyValue.Substring(0, equalsIndex);
+                    string value = keyValue.Substring(equalsIndex + 1);
+                    rssArgs[key] = value;
+                }
+            }
+        }
+        
+        return rssArgs;
+    }
+    
+    private string ProcessChannelPlaceholders(string content, Dictionary<string, string> cliArgs)
+    {
+        // Channel level placeholders to process
+        var placeholders = new Dictionary<string, string>();
+        
+        // LastBuildDate - always auto-generated
+        placeholders["LastBuildDate"] = DateTime.UtcNow.ToString("R"); // RFC 1123 format
+        
+        // Process mandatory fields: Title, Description, Link
+        ProcessMandatoryPlaceholder(content, cliArgs, placeholders, "Title");
+        ProcessMandatoryPlaceholder(content, cliArgs, placeholders, "Description");
+        ProcessMandatoryPlaceholder(content, cliArgs, placeholders, "Link");
+        
+        // Validate Link if provided
+        if (placeholders.ContainsKey("Link"))
+        {
+            ValidateUrl(placeholders["Link"]);
+        }
+        
+        // Replace placeholders in content
+        foreach (var placeholder in placeholders)
+        {
+            string token = $"{{{{{placeholder.Key}}}}}";
+            content = content.Replace(token, placeholder.Value);
+        }
+        
+        return content;
+    }
+    
+    private void ProcessMandatoryPlaceholder(string content, Dictionary<string, string> cliArgs, 
+        Dictionary<string, string> placeholders, string fieldName)
+    {
+        string token = $"{{{{{fieldName}}}}}";
+        bool hasPlaceholder = content.Contains(token);
+        
+        // Check CLI first (highest priority)
+        if (cliArgs.TryGetValue(fieldName, out string? cliValue))
+        {
+            placeholders[fieldName] = cliValue;
+            return;
+        }
+        
+        // If template has placeholder but no CLI value, it's an error
+        if (hasPlaceholder)
+        {
+            throw new InvalidOperationException(
+                $"RSS plugin error: Missing value for {{{{{fieldName}}}}}.\n" +
+                $"Checked CLI (--rss:{fieldName}), but no value found.\n" +
+                $"Provide a CLI argument or replace the placeholder with a value in the template.");
+        }
+        
+        // If no placeholder in template and no CLI value, that's fine - 
+        // the template might have the value directly embedded
+    }
+    
+    private void ValidateUrl(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            throw new InvalidOperationException("RSS plugin error: Link URL cannot be empty.");
+        }
+        
+        // Check for invalid patterns
+        if (url.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
+            url.StartsWith("localhost", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("RSS plugin error: Link URL cannot be 'localhost'.");
+        }
+        
+        // Check if it's a relative URL (no scheme)
+        if (!url.Contains("://"))
+        {
+            throw new InvalidOperationException("RSS plugin error: Link URL must be absolute (include http:// or https://).");
+        }
+        
+        // Try to parse as URI for basic validation
+        if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? parsedUri))
+        {
+            throw new InvalidOperationException($"RSS plugin error: Link URL '{url}' is not a valid URL format.");
+        }
+        
+        // Ensure it's http or https
+        if (parsedUri.Scheme != "http" && parsedUri.Scheme != "https")
+        {
+            throw new InvalidOperationException($"RSS plugin error: Link URL must use http or https scheme, got '{parsedUri.Scheme}'.");
+        }
+    }
+    
+    private void ValidateRequiredRssElements(string content)
+    {
+        // Required RSS elements according to RSS 2.0 spec
+        string[] requiredElements = { "title", "link", "description" };
+        var missingElements = new List<string>();
+        
+        foreach (string element in requiredElements)
+        {
+            string startTag = $"<{element}";
+            string endTag = $"</{element}>";
+            
+            // Check if element exists in the content
+            // Look for start tag (allowing for attributes like <link href="...">)
+            int startIndex = content.IndexOf(startTag, StringComparison.OrdinalIgnoreCase);
+            int endIndex = content.IndexOf(endTag, StringComparison.OrdinalIgnoreCase);
+            
+            // Element must have both opening and closing tags
+            if (startIndex == -1 || endIndex == -1 || endIndex <= startIndex)
+            {
+                missingElements.Add(element);
+            }
+            else
+            {
+                // Check if the element has content (not empty)
+                // Find the actual start of content (after the closing >)
+                int contentStart = content.IndexOf('>', startIndex);
+                if (contentStart != -1 && contentStart < endIndex)
+                {
+                    string elementContent = content.Substring(contentStart + 1, endIndex - contentStart - 1).Trim();
+                    if (string.IsNullOrWhiteSpace(elementContent))
+                    {
+                        missingElements.Add(element + " (empty)");
+                    }
+                }
+                else
+                {
+                    missingElements.Add(element + " (malformed)");
+                }
+            }
+        }
+        
+        if (missingElements.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"RSS plugin error: Required RSS elements are missing or empty in the template: {string.Join(", ", missingElements)}.\n" +
+                $"Each RSS feed must have <title>, <link>, and <description> elements in the <channel>.\n" +
+                $"Either add these elements directly to your template or use placeholders like {{{{Title}}}}, {{{{Link}}}}, {{{{Description}}}} with corresponding CLI arguments.");
+        }
+    }
+    
+    private string RemoveItemsSection(string content)
+    {
+        // Find and remove the <Items>...</Items> section
+        int itemsStart = content.IndexOf("<Items>", StringComparison.OrdinalIgnoreCase);
+        int itemsEnd = content.IndexOf("</Items>", StringComparison.OrdinalIgnoreCase);
+        
+        if (itemsStart >= 0 && itemsEnd >= 0)
+        {
+            // Remove the entire Items section
+            string beforeItems = content.Substring(0, itemsStart).TrimEnd();
+            string afterItems = content.Substring(itemsEnd + "</Items>".Length).TrimStart();
+            
+            // Join with appropriate spacing
+            content = beforeItems + "\n\n" + afterItems;
+        }
+        
+        return content;
     }
     
     private string? GetCustomTemplateFromCli(BlakeContext context)

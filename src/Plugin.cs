@@ -209,6 +209,61 @@ public class Plugin : IBlakePlugin
         }
     }
     
+    private static string NormalizePath(string path)
+    {
+        if (string.IsNullOrEmpty(path))
+            return string.Empty;
+            
+        // Trim leading slashes but preserve trailing slashes
+        return path.TrimStart('/');
+    }
+    
+    private static string[] ParsePaths(string? pathsString)
+    {
+        if (string.IsNullOrWhiteSpace(pathsString))
+            return Array.Empty<string>();
+            
+        // Split on comma or semicolon, trim whitespace, and normalize paths
+        return pathsString
+            .Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(p => NormalizePath(p.Trim()))
+            .Where(p => !string.IsNullOrEmpty(p))
+            .ToArray();
+    }
+    
+    private static bool ShouldIncludePage(string pageSlug, Dictionary<string, string> cliArgs)
+    {
+        var normalizedSlug = NormalizePath(pageSlug);
+        
+        // Check include-paths first (if specified, only include matching paths)
+        var includePathsValue = cliArgs.TryGetValue("include-paths", out var includePaths) ? includePaths : null;
+        if (!string.IsNullOrEmpty(includePathsValue))
+        {
+            var includePathsArray = ParsePaths(includePathsValue);
+            if (includePathsArray.Length > 0)
+            {
+                var shouldInclude = includePathsArray.Any(path => 
+                    normalizedSlug.StartsWith(path, StringComparison.OrdinalIgnoreCase));
+                if (!shouldInclude)
+                    return false;
+            }
+        }
+        
+        // Check ignore-paths (support both old singular and new plural forms)
+        var ignorePathsValue = cliArgs.TryGetValue("ignore-paths", out var ignorePaths) ? ignorePaths :
+                              cliArgs.TryGetValue("ignore-path", out var ignorePath) ? ignorePath : null;
+        if (!string.IsNullOrEmpty(ignorePathsValue))
+        {
+            var ignorePathsArray = ParsePaths(ignorePathsValue);
+            var shouldIgnore = ignorePathsArray.Any(path => 
+                normalizedSlug.StartsWith(path, StringComparison.OrdinalIgnoreCase));
+            if (shouldIgnore)
+                return false;
+        }
+        
+        return true;
+    }
+    
     private void ValidateRequiredRssElements(string content)
     {
         // Required RSS elements according to RSS 2.0 spec
@@ -282,42 +337,28 @@ public class Plugin : IBlakePlugin
             return RemoveItemsSection(content);
         }
         
-        // Process each page and generate RSS items
-        var generatedItems = new List<string>();
+        // Get max-items limit (default to 20 if not specified)
+        var maxItems = 20; // Sensible default
+        if (cliArgs.TryGetValue("max-items", out var maxItemsStr) && int.TryParse(maxItemsStr, out var parsedMaxItems))
+        {
+            maxItems = parsedMaxItems;
+        }
+        
+        // Collect all pages to process
+        var allPages = new List<GeneratedPage>();
         var errors = new List<string>();
         
         // Use GeneratedPages if available, otherwise fallback to creating minimal items from MarkdownPages
         if (context.GeneratedPages.Count > 0)
         {
-            // Check if args contains --rss:ignore-path
-            cliArgs.TryGetValue("ignore-path", out var ignorePath);
-            
-            foreach (var generatedPage in context.GeneratedPages)
-            {
-                try
-                {
-                    // Skip pages that match the ignore path
-                    if (!string.IsNullOrEmpty(ignorePath) && 
-                        generatedPage.Page.Slug.StartsWith(ignorePath, StringComparison.OrdinalIgnoreCase))
-                    {
-                        continue;
-                    }
-                    
-                    var processedItem = ProcessItemPlaceholders(itemTemplate, generatedPage, baseUrl, cliArgs, errors);
-                    generatedItems.Add(processedItem);
-                }
-                catch (Exception ex)
-                {
-                    errors.Add($"Error processing page '{generatedPage.Page.Title}': {ex.Message}");
-                }
-            }
+            allPages.AddRange(context.GeneratedPages.Where(gp => ShouldIncludePage(gp.Page.Slug, cliArgs)));
         }
         else
         {
             // Fallback: create dummy GeneratedPage from MarkdownPages for RSS generation
             foreach (var markdownPage in context.MarkdownPages)
             {
-                try
+                if (ShouldIncludePage(markdownPage.Slug, cliArgs))
                 {
                     // Create a basic PageModel from MarkdownPage
                     var pageModel = new PageModel
@@ -328,13 +369,30 @@ public class Plugin : IBlakePlugin
                     };
                     
                     var dummyGeneratedPage = new GeneratedPage(pageModel, "", markdownPage.RawMarkdown);
-                    var processedItem = ProcessItemPlaceholders(itemTemplate, dummyGeneratedPage, baseUrl, cliArgs, errors);
-                    generatedItems.Add(processedItem);
+                    allPages.Add(dummyGeneratedPage);
                 }
-                catch (Exception ex)
-                {
-                    errors.Add($"Error processing markdown page '{markdownPage.Slug}': {ex.Message}");
-                }
+            }
+        }
+        
+        // Sort by date descending (newest first)
+        allPages = allPages
+            .OrderByDescending(p => p.Page.Date ?? DateTime.MinValue)
+            .Take(maxItems)
+            .ToList();
+        
+        // Process each page and generate RSS items
+        var generatedItems = new List<string>();
+        
+        foreach (var generatedPage in allPages)
+        {
+            try
+            {
+                var processedItem = ProcessItemPlaceholders(itemTemplate, generatedPage, baseUrl, cliArgs, errors);
+                generatedItems.Add(processedItem);
+            }
+            catch (Exception ex)
+            {
+                errors.Add($"Error processing page '{generatedPage.Page.Title}': {ex.Message}");
             }
         }
         

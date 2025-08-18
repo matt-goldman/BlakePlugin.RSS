@@ -294,7 +294,7 @@ public class Plugin : IBlakePlugin
             if (cliArgs.TryGetValue("ignore-path", out var ignorePathValue))
             {
                 ignorePath = ignorePathValue;
-            }
+            cliArgs.TryGetValue("ignore-path", out var ignorePath);
             
             foreach (var generatedPage in context.GeneratedPages)
             {

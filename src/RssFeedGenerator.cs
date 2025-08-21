@@ -1,6 +1,7 @@
 using Blake.BuildTools;
 using Blake.Types;
 using System.Globalization;
+using System.Net;
 using System.Text.RegularExpressions;
 
 namespace BlakePlugin.RSS;
@@ -270,6 +271,8 @@ internal static class RssFeedGenerator
         {
             if (!string.IsNullOrEmpty(value))
             {
+                // HTML escape the value if it's not already HTML encoded
+                value = WebUtility.HtmlEncode(value);
                 placeholders[placeholderName] = value;
             }
             else
@@ -330,6 +333,8 @@ internal static class RssFeedGenerator
             
             if (!string.IsNullOrEmpty(value))
             {
+                // HTML escape the value if it's not already HTML encoded
+                value = WebUtility.HtmlEncode(value);
                 placeholders[placeholderName] = value;
             }
             else

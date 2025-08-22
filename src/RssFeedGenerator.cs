@@ -239,7 +239,10 @@ internal static class RssFeedGenerator
                 : "";
             placeholders["Item.ContentEncoded"] = contentEncoded;
         }
-        
+
+        // Process standard RSS item placeholders
+        ProcessItemPlaceholder(itemTemplate, "Item.Image", page.Image, placeholders, errors, page.Title);
+
         // Process custom placeholders from metadata and CLI
         ProcessCustomItemPlaceholders(itemTemplate, page, cliArgs, placeholders, errors);
         

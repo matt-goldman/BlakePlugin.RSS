@@ -122,7 +122,7 @@ internal static class RssFeedGenerator
                         Description = "No description available"
                     };
                     
-                    var dummyGeneratedPage = new GeneratedPage(pageModel, "", markdownPage.RawMarkdown);
+                    var dummyGeneratedPage = new GeneratedPage(pageModel, "", markdownPage.RawMarkdown, "");
                     allPages.Add(dummyGeneratedPage);
                 }
             }
@@ -230,8 +230,8 @@ internal static class RssFeedGenerator
         if (itemTemplate.Contains("{{Item.ContentEncoded}}", StringComparison.OrdinalIgnoreCase))
         {
             // Use the rendered HTML content if available, otherwise fallback to Description
-            var htmlContent = !string.IsNullOrEmpty(generatedPage.RazorHtml) 
-                ? generatedPage.RazorHtml 
+            var htmlContent = !string.IsNullOrEmpty(generatedPage.RawHtml) 
+                ? generatedPage.RawHtml 
                 : page.Description ?? "";
                 
             var contentEncoded = !string.IsNullOrEmpty(htmlContent) 

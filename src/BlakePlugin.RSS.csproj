@@ -21,7 +21,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Blake.BuildTools" Version="1.0.18" />
+    <PackageReference Include="Blake.BuildTools" Version="1.0.22" />
   </ItemGroup>
 
   <ItemGroup>
